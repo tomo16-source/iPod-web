@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="iPod-web">
+<meta name="theme-color" content="#222222">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<title>iPod-web</title>
+
+<style>
+body{
+  background:#222;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+  width:100vw;
+  overflow:hidden;
+  font-family:sans-serif;
+  user-select:none;
+  -webkit-user-select:none;
+  margin:0;
+  padding:0;
+}
+
+#ipod{width:260px;height:420px;background:#f5f5f5;border-radius:20px;padding:10px;display:flex;flex-direction:column;transform-origin:center center;}
+#screen{background:#e5e5e5;height:160px;border-radius:10px;position:relative;margin:5px;overflow:hidden;}
+#boot{position:absolute;width:100%;height:100%;background:#333;display:flex;justify-content:center;align-items:center;color:white;font-size:48px;z-index:100;}
+
+/* トップバー：常に全幅 */
+#topbar{position:absolute;top:0;left:0;width:50%;height:20px;background:#ccc;box-sizing:border-box;}
+#topbar::after{content:"";position:absolute;left:100%;top:0;width:100vw;height:100%;background:#555;}
+#topbar.full{width:100%;}
+#toptext{position:absolute;left:6px;top:3px;font-size:10px;font-weight:bold;}
+#status{position:absolute;right:40px;top:3px;font-size:10px;}
+#battery{position:absolute;right:6px;top:3px;width:20px;height:10px;border:2px solid #444;display:flex;padding:1px;}
+#battery::before{content:"";position:absolute;right:-4px;top:2px;width:3px;height:6px;background:#444;}
+.battery-cell{flex:1;background:#2a2;}
+.battery-cell:first-child{border-left:none;}
+
+/* コンテンツエリア */
+#content{position:absolute;top:20px;left:0;right:0;bottom:0;display:flex;overflow:hidden;background:#555;}
+
+@keyframes slideInRight {from{transform:translateX(100%);}to{transform:translateX(0);}}
+@keyframes slideInLeft  {from{transform:translateX(-100%);}to{transform:translateX(0);}}
+@keyframes slideOutRight{from{transform:translateX(0);}to{transform:translateX(100%);}}
+
+#list.slide-out-right{animation:slideOutRight 0.18s ease-out;}
+
+/* リストのクリップ用ラッパー */
+#list-wrapper{position:relative;width:50%;overflow:hidden;flex-shrink:0;}
+#list-wrapper.full{width:100%;}
+
+#list{position:relative;width:100%;height:100%;overflow:hidden;background:#e5e5e5;}
+#list.slide-right{animation:slideInRight 0.18s ease-out;}
+#list.slide-left {animation:slideInLeft  0.18s ease-out;}
+
+.item{height:28px;line-height:28px;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;display:flex;align-items:center;justify-content:space-between;}
+.item.active{background:#3399cc;color:white;border-radius:6px;}
+.item .arrow{font-size:9px;opacity:0.5;}
+.item.active .arrow{opacity:1;}
+
+.marquee-wrap{overflow:hidden;flex:1;}
+.marquee-inner{display:inline-block;white-space:nowrap;}
+
+/* プレビューエリア（右半分） */
+#preview{width:50%;height:100%;overflow:hidden;position:relative;background:#555;}
+#preview img{
+  position:absolute;
+  width:140%;height:140%;
+  object-fit:cover;
+  animation:float 20s linear infinite;
+}
+#preview.hidden{display:none;}
+
+@keyframes float{
+  0%{transform:translate(0,0);}
+  25%{transform:translate(-20%,0);}
+  50%{transform:translate(-20%,-20%);}
+  75%{transform:translate(0,-20%);}
+  100%{transform:translate(0,0);}
+}
+
+/* Now Playing画面 */
+/* nowplayingはlist-wrapperに重なる位置 */
+#nowplaying{position:absolute;top:20px;left:0;width:50%;bottom:0;display:none;flex-direction:column;overflow:hidden;z-index:5;background:#e5e5e5;}
+#nowplaying.fullwidth{width:100%;}
+
+#nowplaying.visible{display:flex;}
+
+/* 上段：左サムネ＋右情報の2カラム */
+#np-top{display:flex;flex-direction:row;flex:1;overflow:hidden;}
+
+/* 左：サムネイルを中央に */
+#np-thumb-col{width:50%;display:flex;align-items:center;justify-content:center;padding:6px;}
+#np-thumb{width:80px;height:80px;object-fit:cover;border-radius:6px;flex-shrink:0;box-shadow:4px 4px 12px rgba(0,0,0,0.4);transform:perspective(200px) rotateY(20deg);}
+
+/* 右：情報を中央に */
+#np-info{width:50%;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:6px 6px 6px 2px;overflow:hidden;}
+#np-title-wrap{overflow:hidden;width:100%;}
+#np-title-inner{display:inline-block;white-space:nowrap;font-size:11px;font-weight:bold;}
+#np-artist{font-size:10px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#np-track{font-size:10px;color:#888;}
+
+/* 下段：バーエリア */
+#np-bar-area{padding:0 6px 6px 6px;display:flex;flex-direction:column;gap:2px;}
+#np-seekbar{width:100%;height:4px;background:#bbb;border-radius:2px;overflow:hidden;}
+#np-seekfill{height:100%;background:#09c;width:0%;border-radius:2px;transition:width 0.4s linear;}
+#np-times{display:flex;justify-content:space-between;font-size:9px;color:#777;}
+#np-volbar{width:100%;height:4px;background:#bbb;border-radius:2px;overflow:hidden;}
+#np-volfill{height:100%;background:#09c;width:80%;border-radius:2px;transition:width 0.15s ease;}
+
+
+/* 仕切り線 */
+#divider{display:none!important;}
+#divider.hidden{display:none;}
+
+/* ホイール */
+#bottom-area{flex:1;display:flex;justify-content:center;align-items:center;}
+#wheel{width:200px;height:200px;background:#ddd;border-radius:50%;position:relative;touch-action:none;}
+.btn{pointer-events:auto;cursor:pointer;}
+.top{position:absolute;top:10px;width:100%;text-align:center;font-size:11px;padding-bottom:12px;}
+.bottom{position:absolute;bottom:10px;width:100%;text-align:center;padding-top:12px;}
+.left{position:absolute;left:10px;top:90px;padding-right:12px;}
+.right{position:absolute;right:10px;top:90px;padding-left:12px;}
+.center{position:absolute;width:80px;height:80px;background:white;border-radius:50%;top:60px;left:60px;cursor:pointer;}
+</style>
+</head>
+
+<body>
+<div id="ipod">
+  <div id="screen">
+    <div id="boot">&#xf8ff;</div>
+
+    <div id="topbar">
+      <div id="toptext">iPod</div>
+      <div id="status"></div>
+      <div id="battery">
+        <div class="battery-cell"></div>
+        <div class="battery-cell"></div>
+        <div class="battery-cell"></div>
+        <div class="battery-cell"></div>
+      </div>
+    </div>
+
+    <div id="divider"></div>
+
+    <div id="content">
+      <div id="list-wrapper"><div id="list"></div></div>
+      <div id="preview"></div>
+    </div>
+
+    <!-- Now Playing画面 -->
+    <div id="nowplaying">
+      <div id="np-top">
+        <div id="np-thumb-col">
+          <img id="np-thumb" src="" alt="">
+        </div>
+        <div id="np-info">
+          <div id="np-title-wrap"><span id="np-title-inner">---</span></div>
+          <div id="np-artist">---</div>
+          <div id="np-track">- / -</div>
+        </div>
+      </div>
+      <div id="np-bar-area">
+        <div id="np-seekbar"><div id="np-seekfill"></div></div>
+        <div id="np-volrow" style="display:none;align-items:center;gap:4px;">
+          <span id="np-voldown" style="font-size:10px;">🔉</span>
+          <div id="np-volbar" style="flex:1;"><div id="np-volfill"></div></div>
+          <span id="np-volup" style="font-size:10px;">🔊</span>
+        </div>
+        <div id="np-times"><span id="np-cur">0:00</span><span id="np-dur">0:00</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="bottom-area">
+    <div id="wheel">
+      <div id="btn-menu" class="top btn">MENU</div>
+      <div id="btn-play" class="bottom btn">⏯&#xFE0E;</div>
+      <div id="btn-prev" class="left btn">⏮&#xFE0E;</div>
+      <div id="btn-next" class="right btn">⏭&#xFE0E;</div>
+      <div class="center"></div>
+    </div>
+  </div>
+</div>
+
+<audio id="localplayer" style="display:none" playsinline></audio>
+<input type="file" id="local-file-input" accept="audio/*" multiple style="display:none">
+<script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.7/dist/jsmediatags.min.js"></script>
+
+<script>
+/* =====================
+   データ
+===================== */
+const songs=[];
+
+/* =====================
+   言語設定
+===================== */
+let lang="ja";
+let autoNowPlaying=true; // 曲選択時に自動でNow Playing画面へ
+let listThumbMode=false; // 曲リストのサムネイル表示
+let shuffleMode=false;    // シャッフルモード中か
+let clockEnabled=false;  // 時計モードON/OFF
+let clickSoundEnabled=true; // クリック音ON/OFF
+let clock24h=false;      // 24時間表示
+let clockTimer=null;     // 非操作タイマー
+let clockActive=false;   // 現在時計表示中か
+const I18N={
+  en:{main:"iPod",music:"Music",songs:"Songs",extras:"Extras",settings:"Settings",language:"Language",nowplaying:"Now Playing",shufflesongs:"Shuffle Songs",comingsoon:"(Coming Soon)",nosongs:"No songs. Add from the main menu.",autonpon:"Auto NowPlaying: ON",autonpoff:"Auto NowPlaying: OFF",listfull:"List View: Full",listthumb:"List View: Thumbnail",clockon:"Clock: ON",clockoff:"Clock: OFF",clock12:"Clock: 12h",clock24:"Clock: 24h",clickon:"Click Sound: ON",clickoff:"Click Sound: OFF"},
+  ja:{main:"iPod",music:"ミュージック",songs:"曲",extras:"エクストラ",settings:"設定",language:"言語",nowplaying:"再生中",shufflesongs:"シャッフル再生",comingsoon:"(準備中)",nosongs:"曲がありません\nメインメニューの「曲を追加」から追加してください",autonpon:"曲選択で再生中へ: ON",autonpoff:"曲選択で再生中へ: OFF",listfull:"リスト表示: 全画面",listthumb:"リスト表示: サムネイル",clockon:"時計: ON",clockoff:"時計: OFF",clock12:"時刻表示: 12時間",clock24:"時刻表示: 24時間",clickon:"クリック音: ON",clickoff:"クリック音: OFF"},
+};
+function t(key){return I18N[lang][key]||key;}
+
+/* =====================
+   メニュー定義（動的生成）
+===================== */
+function buildMenus(){
+  return {
+    main:[
+      {label:"ミュージック",      arrow:true,  action:"goto",   target:"music"},
+      {label:"Cover Flow",       arrow:true,  action:"none"},
+      {label:"曲を追加",          arrow:false, action:"openlocalpicker"},
+      {label:"アーティスト",      arrow:true,  action:"none"},
+      {label:"アルバム",          arrow:true,  action:"none"},
+      {label:"コンピレーション",  arrow:true,  action:"none"},
+      {label:"曲",               arrow:true,  action:"goto",   target:"songs"},
+      {label:"ラジオ",            arrow:true,  action:"none"},
+      {label:"ジャンル",          arrow:true,  action:"none"},
+      {label:"作曲者",            arrow:true,  action:"none"},
+      {label:"オーディオブック",  arrow:true,  action:"none"},
+      {label:"検索",              arrow:true,  action:"none"},
+      {label:"写真",              arrow:true,  action:"none"},
+      {label:"Podcast",          arrow:true,  action:"none"},
+      {label:"ビデオ",            arrow:true,  action:"none"},
+      {label:"ビデオプレイリスト",arrow:true,  action:"none"},
+      {label:"ムービー",          arrow:true,  action:"none"},
+      {label:"テレビ番組",        arrow:true,  action:"none"},
+      {label:"ミュージックビデオ",arrow:true,  action:"none"},
+      {label:"レンタル",          arrow:true,  action:"none"},
+      {label:"エクストラ",        arrow:true,  action:"goto",   target:"extras"},
+      {label:"世界時計",          arrow:true,  action:"none"},
+      {label:"アラーム",          arrow:true,  action:"none"},
+      {label:"カレンダー",        arrow:true,  action:"none"},
+      {label:"連絡先",            arrow:true,  action:"none"},
+      {label:"ゲーム",            arrow:true,  action:"none"},
+      {label:"メモ",              arrow:true,  action:"none"},
+      {label:"画面のロック",      arrow:true,  action:"none"},
+      {label:"タイム計測",        arrow:true,  action:"none"},
+      {label:"Nike+Pod",         arrow:true,  action:"none"},
+      {label:"曲をシャッフル",    arrow:false, action:"shuffle"},
+      {label:"スリープ",          arrow:true,  action:"none"},
+      {label:"再生中",            arrow:true,  action:"nowplaying"},
+      {label:"設定",              arrow:true,  action:"goto",   target:"settings"},
+    ],
+    music:[
+      {labelKey:"songs",       arrow:true,  action:"goto",target:"songs"},
+    ],
+    songs: songs.map((s,i)=>({label:s.artist+" - "+s.title, arrow:false, action:"playsong", idx:i})),
+    extras:[
+      {labelKey:"comingsoon",  arrow:false, action:"none"},
+    ],
+    settings:[
+      {labelKey:"language",    arrow:true,  action:"goto",target:"language"},
+      {get label(){return t(autoNowPlaying?"autonpon":"autonpoff");}, arrow:false, action:"toggleautonp"},
+      {get label(){return t(listThumbMode?"listthumb":"listfull");}, arrow:false, action:"togglelistmode"},
+      {get label(){return t(clockEnabled?"clockon":"clockoff");},  arrow:false, action:"toggleclock"},
+      {get label(){return t(clock24h?"clock24":"clock12");},       arrow:false, action:"toggleclock24"},
+      {get label(){return t(clickSoundEnabled?"clickon":"clickoff");}, arrow:false, action:"toggleclick"},
+    ],
+    language:[
+      {label:lang==="en"?"日本語":"English", arrow:false, action:"setlang"},
+    ],
+  };
+}
+let MENUS=buildMenus();
+function rebuildMenus(){MENUS=buildMenus();}
+
+/* =====================
+   状態
+===================== */
+let isPlaying=false, hasPlayed=false;
+let currentSongIdx=0;
+let timeInterval=null;
+
+// メニュー階層スタック: {menuKey, selectedIdx, scrollOffset}
+let menuStack=[{menuKey:"main", selectedIdx:0, scrollOffset:0}];
+
+// 現在の画面モード: "menu" | "nowplaying"
+let screenMode="menu";
+
+const visibleCount=5;
+
+/* =====================
+   ユーティリティ
+===================== */
+// クリック音：最初のタッチまで全て遅延初期化
+let _actx=null;
+let _clickBuffer=null;
+let _audioReady=false;
+
+const _clickB64="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";
+
+function _b64ToArrayBuffer(b64){
+  const bin=atob(b64);
+  const buf=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i);
+  return buf.buffer;
+}
+
+async function _initAudio(){
+  try{
+    if(!_actx){
+      _actx=new (window.AudioContext||window.webkitAudioContext)();
+    }
+    if(_actx.state==="suspended"){
+      await _actx.resume();
+    }
+    if(!_clickBuffer){
+      _clickBuffer=await _actx.decodeAudioData(_b64ToArrayBuffer(_clickB64));
+      _audioReady=true;
+    }
+  }catch(e){console.log("audio init:",e);}
+}
+
+// タッチ/クリックのたびにAudio初期化とresumeを試みる
+document.addEventListener("touchstart",()=>{
+  _initAudio();
+  if(_actx&&_actx.state==="suspended") _actx.resume();
+},{passive:true});
+document.addEventListener("mousedown",()=>{
+  _initAudio();
+  if(_actx&&_actx.state==="suspended") _actx.resume();
+});
+
+function clickSound(){
+  if(!clickSoundEnabled)return;
+  if(!_audioReady||!_actx||!_clickBuffer)return;
+  try{
+    const src=_actx.createBufferSource();
+    src.buffer=_clickBuffer;
+    src.connect(_actx.destination);
+    src.start(0);
+  }catch(e){}
+}
+
+function updateStatus(){
+  document.getElementById("status").textContent=hasPlayed?(isPlaying?"▶︎":"⏸︎"):"";
+}
+
+function fmtTime(sec){
+  if(isNaN(sec)||sec<0)return"0:00";
+  const m=Math.floor(sec/60), s=Math.floor(sec%60);
+  return m+":"+(s<10?"0":"")+s;
+}
+
+function updateNowPlayingTime(){
+  const cur=localplayer.currentTime||0;
+  const dur=localplayer.duration||0;
+  document.getElementById("np-cur").textContent=fmtTime(cur);
+  document.getElementById("np-dur").textContent=fmtTime(dur);
+  const pct=dur>0?(cur/dur*100):0;
+  document.getElementById("np-seekfill").style.width=pct+"%";
+}
+
+let npTitleScrolling=false;
+function startNpTitleScroll(){
+  const inner=document.getElementById("np-title-inner");
+  const wrap=document.getElementById("np-title-wrap");
+  if(!inner||!wrap)return;
+
+  // リセット
+  npTitleScrolling=false;
+  inner.style.transform="translateX(0)";
+
+  // 収まるなら固定
+  const textWidth=inner.scrollWidth;
+  const wrapWidth=wrap.offsetWidth;
+  if(textWidth<=wrapWidth) return;
+
+  // 収まらない場合：3秒後に1回だけリストと同じ動作で流れて止まる
+  npTitleScrolling=true;
+  const gapPx=28;
+  const stopAt=textWidth+gapPx;
+
+  // [text1][gap][text2]構造
+  const text=inner.textContent;
+  inner.innerHTML=
+    `<span class="sc-t1">${text}</span>`+
+    `<span style="display:inline-block;width:${gapPx}px"></span>`+
+    `<span class="sc-t2">${text}</span>`;
+
+  setTimeout(()=>{
+    if(!npTitleScrolling)return; // 曲が変わっていたらキャンセル
+    let pos=0;
+    let stopped=false;
+    function step(){
+      if(!npTitleScrolling||stopped)return;
+      pos-=0.5;
+      // sc-t2の左端がwrapの左端に来たら止まる
+      const t2=inner.querySelector('.sc-t2');
+      const wrapLeft=wrap.getBoundingClientRect().left;
+      const t2Left=t2?t2.getBoundingClientRect().left:Infinity;
+      if(t2Left<=wrapLeft+1){
+        stopped=true;
+        npTitleScrolling=false;
+        return;
+      }
+      inner.style.transform=`translateX(${pos}px)`;
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  },3000);
+}
+
+
+/* =====================
+   音量バー制御
+===================== */
+let volume=80; // 初期音量 0-100
+let volMode=false;
+let volTimer=null;
+
+function showVolBar(){
+  volMode=true;
+  document.getElementById("np-seekbar").style.display="none";
+  document.getElementById("np-times").style.display="none";
+  document.getElementById("np-volrow").style.display="flex";
+  updateVolBar();
+  // 5秒で自動的に再生バーに戻す
+  if(volTimer)clearTimeout(volTimer);
+  volTimer=setTimeout(hideVolBar, 5000);
+}
+
+function hideVolBar(){
+  volMode=false;
+  volTimer=null;
+  document.getElementById("np-seekbar").style.display="block";
+  document.getElementById("np-times").style.display="flex";
+  document.getElementById("np-volrow").style.display="none";
+}
+
+function updateVolBar(){
+  document.getElementById("np-volfill").style.width=volume+"%";
+  localplayer.volume=volume/100;
+}
+
+function volumeUp(){
+  volume=Math.min(100,volume+5);
+  showVolBar();
+}
+
+function volumeDown(){
+  volume=Math.max(0,volume-5);
+  showVolBar();
+}
+
+
+/* =====================
+   時計表示
+===================== */
+function getClockText(){
+  const now=new Date();
+  let h=now.getHours(), m=now.getMinutes();
+  if(!clock24h){
+    const ampm=h>=12?"PM":"AM";
+    h=h%12||12;
+    return h+":"+(m<10?"0":"")+m+" "+ampm;
+  }
+  return (h<10?"0":"")+h+":"+(m<10?"0":"")+m;
+}
+
+let _savedTopText="";
+function showClock(){
+  if(!clockEnabled||clockActive)return;
+  clockActive=true;
+  _savedTopText=document.getElementById("toptext").textContent;
+  document.getElementById("toptext").textContent=getClockText();
+  // 時計は毎秒更新
+  clockTimer=setInterval(()=>{
+    if(clockActive) document.getElementById("toptext").textContent=getClockText();
+  },1000);
+}
+
+function restoreTopText(){
+  if(!clockActive)return;
+  clockActive=false;
+  if(clockTimer){clearInterval(clockTimer);clockTimer=null;}
+  // 現在の画面に合ったタイトルを再表示
+  if(screenMode==="nowplaying"){
+    document.getElementById("toptext").textContent=t("nowplaying");
+  } else {
+    const cur=menuStack[menuStack.length-1];
+    const titleKeys={main:"main",music:"music",songs:"songs",extras:"extras",settings:"settings",language:"language"};
+    document.getElementById("toptext").textContent=t(titleKeys[cur.menuKey]||"main");
+  }
+}
+
+function stopClock(){
+  clockActive=false;
+  if(clockTimer){clearInterval(clockTimer);clockTimer=null;}
+}
+
+let idleTimer=null;
+function resetIdleTimer(){
+  if(idleTimer)clearTimeout(idleTimer);
+  if(clockActive) restoreTopText();
+  if(clockEnabled){
+    idleTimer=setTimeout(showClock,2000);
+  }
+}
+
+function startTimeInterval(){
+  if(timeInterval)clearInterval(timeInterval);
+  timeInterval=setInterval(updateNowPlayingTime,500);
+}
+
+/* =====================
+   再生制御
+===================== */
+async function playSong(idx){
+  currentSongIdx=idx;
+  const s=songs[idx];
+  await _initAudio(); // スマホ対応：AudioContext初期化を完了してから再生
+  localplayer.src=s.url;
+  try{ await localplayer.play(); }catch(e){console.log("play error:",e);}
+  isPlaying=true;hasPlayed=true;
+  updateStatus();
+  updateNowPlayingInfo();
+  startTimeInterval();
+}
+
+function togglePlay(){
+  if(!hasPlayed)return;
+  isPlaying?localplayer.pause():localplayer.play();
+  clickSound();
+}
+
+function syncSongsMenuCursor(){
+  // songsメニューが開いていれば選択カーソルも連動させる
+  for(let i=menuStack.length-1;i>=0;i--){
+    if(menuStack[i].menuKey==="songs"){
+      menuStack[i].selectedIdx=currentSongIdx;
+      // スクロールオフセットも調整
+      if(currentSongIdx<menuStack[i].scrollOffset)
+        menuStack[i].scrollOffset=currentSongIdx;
+      if(currentSongIdx>=menuStack[i].scrollOffset+visibleCount)
+        menuStack[i].scrollOffset=currentSongIdx-visibleCount+1;
+      break;
+    }
+  }
+  render();
+}
+
+function nextTrackAuto(){
+  // 曲終了時の自動スキップ（クリック音なし）
+  if(shuffleMode){
+    const idx=randomOtherIdx();
+    if(!shuffleMode) return;
+    playSong(idx);syncSongsMenuCursor();
+  } else if(currentSongIdx<songs.length-1){
+    currentSongIdx++;playSong(currentSongIdx);syncSongsMenuCursor();
+  }
+}
+
+function nextTrack(){
+  if(shuffleMode){
+    // 履歴に次がある場合はそれを使う（戻った後に進む場合）
+    if(shufflePos<shuffleHistory.length-1){
+      shufflePos++;
+      const idx=shuffleHistory[shufflePos];
+      playSong(idx);syncSongsMenuCursor();clickSound();
+    } else {
+      const idx=randomOtherIdx();
+      if(!shuffleMode) return; // 全曲再生済みで終了
+      playSong(idx);syncSongsMenuCursor();clickSound();
+    }
+  } else if(currentSongIdx<songs.length-1){
+    currentSongIdx++;playSong(currentSongIdx);syncSongsMenuCursor();clickSound();
+  }
+}
+
+function prevTrack(){
+  if(shuffleMode){
+    if(shufflePos>0){
+      shufflePos--;
+      const idx=shuffleHistory[shufflePos];
+      playSong(idx);syncSongsMenuCursor();clickSound();
+    }
+  } else if(currentSongIdx>0){
+    currentSongIdx--;playSong(currentSongIdx);syncSongsMenuCursor();clickSound();
+  }
+}
+
+let shuffleHistory=[];  // 再生済みインデックス（順番に記録）
+let shufflePos=-1;      // 履歴の現在位置
+
+function shufflePlay(){
+  shuffleMode=true;
+  shuffleHistory=[];
+  shufflePos=-1;
+  const idx=Math.floor(Math.random()*songs.length);
+  shuffleHistory.push(idx);
+  shufflePos=0;
+  playSong(idx);
+  clickSound();
+}
+
+function randomOtherIdx(){
+  if(songs.length<=1)return currentSongIdx;
+  // 未再生の曲から選ぶ
+  let remaining=songs.map((_,i)=>i).filter(i=>!shuffleHistory.includes(i));
+  // 全曲再生済みなら終了
+  if(remaining.length===0){
+    shuffleMode=false;
+    shuffleHistory=[];
+    return currentSongIdx; // 次の曲なし＝再生終了
+  }
+  const idx=remaining[Math.floor(Math.random()*remaining.length)];
+  shuffleHistory.push(idx);
+  shufflePos=shuffleHistory.length-1;
+  return idx;
+}
+
+const LOCAL_ART_SVG="data:image/svg+xml;utf8,"+encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="%23333"/><text x="50%" y="54%" font-size="90" text-anchor="middle" fill="%23bbb" font-family="sans-serif">&#9834;</text></svg>'
+);
+
+function thumbUrl(s){
+  return (s&&s.artworkUrl) ? s.artworkUrl : LOCAL_ART_SVG;
+}
+
+function updateNowPlayingInfo(){
+  const s=songs[currentSongIdx];
+  document.getElementById("np-thumb").src=thumbUrl(s);
+  document.getElementById("np-artist").textContent=s.artist;
+  const inner=document.getElementById("np-title-inner");
+  npTitleScrolling=false;
+  inner.textContent=s.title;
+  inner.style.transform="translateX(0)";
+  document.getElementById("np-track").textContent=(currentSongIdx+1)+" / "+songs.length;
+  setTimeout(startNpTitleScroll, 100);
+
+  // MediaSession API（ロック画面・通知センターに曲情報を表示）
+  if("mediaSession" in navigator){
+    navigator.mediaSession.metadata=new MediaMetadata({
+      title:s.title,
+      artist:s.artist,
+      album:"iPod-web",
+      artwork:[{src:thumbUrl(s),sizes:"200x200",type:s.artworkUrl?"image/jpeg":"image/svg+xml"}]
+    });
+    navigator.mediaSession.setActionHandler("play",()=>togglePlayIfPaused());
+    navigator.mediaSession.setActionHandler("pause",()=>togglePlayIfPlaying());
+    navigator.mediaSession.setActionHandler("nexttrack",()=>nextTrack());
+    navigator.mediaSession.setActionHandler("previoustrack",()=>prevTrack());
+  }
+}
+
+function togglePlayIfPaused(){ if(!isPlaying) togglePlay(); }
+function togglePlayIfPlaying(){ if(isPlaying) togglePlay(); }
+
+/* =====================
+   画面描画
+===================== */
+function startScroll(el,text){
+  const gap="     ";
+  // テキスト幅を計測
+  const span=document.createElement("span");
+  span.style.cssText="white-space:nowrap;visibility:hidden;position:absolute;";
+  span.textContent=text;
+  document.body.appendChild(span);
+  const textWidth=span.offsetWidth;
+  const wrapWidth=el.parentElement?el.parentElement.offsetWidth:0;
+  document.body.removeChild(span);
+
+  // 見切れていない場合はそのまま表示して終了
+  if(textWidth<=wrapWidth){
+    el.style.transform="translateX(0)";
+    el.textContent=text;
+    return;
+  }
+
+  // 見切れている場合：
+  // wrapの左端座標を基準にtext2が来たら止まる
+  const wrap = el.closest('.marquee-wrap');
+  const gapPx = 28;
+
+  el.innerHTML =
+    `<span class="sc-t1">${text}</span>`+
+    `<span style="display:inline-block;width:${gapPx}px"></span>`+
+    `<span class="sc-t2">${text}</span>`;
+
+  let stopped = false;
+  function step(){
+    if(stopped) return;
+
+    // wrapの左端X座標（画面上の実際の位置）
+    const wrapLeft = wrap ? wrap.getBoundingClientRect().left : 0;
+    // text2の左端X座標
+    const t2 = el.querySelector('.sc-t2');
+    const t2Left = t2 ? t2.getBoundingClientRect().left : Infinity;
+
+    // text2の左端がwrapの左端に達したら止まる
+    if(t2Left <= wrapLeft + 1){
+      // 現在のposを固定
+      stopped = true;
+      return;
+    }
+
+    const cur = el.style.transform;
+    const match = cur.match(/translateX\(([-\d.]+)px\)/);
+    const pos = match ? parseFloat(match[1]) : 0;
+    el.style.transform = `translateX(${pos - 0.5}px)`;
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function showNowPlayingScreen(dir){
+  screenMode="nowplaying";
+  document.getElementById("topbar").classList.add("full");
+  document.getElementById("toptext").textContent=t("nowplaying");
+  if(hasPlayed) updateNowPlayingInfo();
+  else { npTitleScrolling=false; }
+
+  const npEl=document.getElementById("nowplaying");
+  const listEl=document.getElementById("list");
+  const wrapper=document.getElementById("list-wrapper");
+
+  npEl.classList.add("fullwidth");
+  if(wrapper) wrapper.style.overflow="visible";
+  listEl.style.visibility="hidden";
+  npEl.classList.add("visible");
+
+  if(dir){
+    // 右から全画面スライドイン
+    npEl.style.transform="translateX(100%)";
+    npEl.style.transition="none";
+    void npEl.offsetWidth;
+    npEl.style.transition="transform 0.18s ease-out";
+    npEl.style.transform="translateX(0)";
+    npEl.addEventListener("transitionend",()=>{
+      npEl.style.transition="";
+      npEl.style.transform="";
+    },{once:true});
+  }
+}
+
+function showMenuScreen(dir){
+  screenMode="menu";
+  document.getElementById("topbar").classList.remove("full");
+  const listEl=document.getElementById("list");
+  const wrapper=document.getElementById("list-wrapper");
+  const npEl=document.getElementById("nowplaying");
+
+  if(dir==="left" && npEl.classList.contains("visible")){
+    // nowplayingが右に去ってからメニュー表示
+    npEl.style.transition="transform 0.18s ease-out";
+    npEl.style.transform="translateX(100%)";
+    npEl.addEventListener("transitionend",()=>{
+      npEl.style.transition="";
+      npEl.style.transform="";
+      npEl.classList.remove("visible");
+      listEl.style.visibility="visible";
+      if(wrapper) wrapper.style.overflow="";
+      document.getElementById("content").style.display="flex";
+      render();
+    },{once:true});
+  } else {
+    npEl.classList.remove("visible");
+    listEl.style.visibility="visible";
+    document.getElementById("content").style.display="flex";
+    render();
+    if(dir) slideList(dir);
+  }
+}
+
+function render(){
+  if(screenMode!=="menu")return;
+
+  const cur=menuStack[menuStack.length-1];
+  const menuKey=cur.menuKey;
+  const items=MENUS[menuKey];
+  const selIdx=cur.selectedIdx;
+  const scrollOffset=cur.scrollOffset;
+
+  // トップバーのタイトル
+  const titleKeys={main:"main",music:"music",songs:"songs",extras:"extras",settings:"settings",language:"language"};
+  document.getElementById("toptext").textContent=t(titleKeys[menuKey]||"main");
+
+  const listEl=document.getElementById("list");
+  const listWrapper=document.getElementById("list-wrapper");
+  const previewEl=document.getElementById("preview");
+  const dividerEl=document.getElementById("divider");
+  listEl.innerHTML="";
+
+  // リスト表示モードに応じてレイアウト切り替え
+  const topbarEl=document.getElementById("topbar");
+  if(menuKey==="songs" && listThumbMode){
+    // サムネイルモード：左半分リスト＋右サムネ
+    listEl.classList.remove("full");
+    listWrapper.classList.remove("full");
+    listWrapper.style.overflow="hidden";
+    dividerEl.classList.remove("hidden");
+    previewEl.classList.remove("hidden");
+    previewEl.innerHTML=`<img src="${thumbUrl(songs[selIdx])}">`;
+    topbarEl.classList.remove("full");
+  } else if(menuKey==="songs" && !listThumbMode){
+    // 全画面モード：リスト全幅、仕切り・サムネなし、バーも全幅
+    listEl.classList.add("full");
+    listWrapper.classList.add("full");
+    listWrapper.style.overflow="visible";
+    dividerEl.classList.add("hidden");
+    previewEl.classList.add("hidden");
+    topbarEl.classList.add("full");
+  } else {
+    // songs以外：左半分リスト＋仕切り線（右は空）
+    listEl.classList.remove("full");
+    listWrapper.classList.remove("full");
+    listWrapper.style.overflow="hidden";
+    dividerEl.classList.remove("hidden");
+    previewEl.classList.add("hidden");
+    topbarEl.classList.remove("full");
+  }
+
+  // 曲が空の場合はメッセージ表示
+  if(menuKey==="songs" && songs.length===0){
+    const lines=t("nosongs").split("\n");
+    lines.forEach(line=>{
+      const div=document.createElement("div");
+      div.style.cssText="font-size:10px;color:#666;padding:4px 6px;line-height:1.6;";
+      div.textContent=line;
+      listEl.appendChild(div);
+    });
+    return;
+  }
+
+  for(let i=0;i<visibleCount;i++){
+    const idx=scrollOffset+i;
+    if(idx>=items.length) break;
+    const item=items[idx];
+    const itemLabel=item.label!==undefined ? item.label : t(item.labelKey);
+
+    const div=document.createElement("div");
+    div.className="item";
+    if(idx===selIdx) div.classList.add("active");
+
+    if(idx===selIdx){
+      // 選択中：marqueeスクロール
+      const wrap=document.createElement("div");
+      wrap.className="marquee-wrap";
+      const inner=document.createElement("div");
+      inner.className="marquee-inner";
+      wrap.appendChild(inner);
+      div.appendChild(wrap);
+      if(item.arrow && idx===selIdx){const a=document.createElement("span");a.className="arrow";a.textContent=">";div.appendChild(a);}
+      setTimeout(()=>startScroll(inner,itemLabel),10);
+    } else {
+      // 非選択：省略なしでそのまま表示
+      const span=document.createElement("span");
+      span.style.flex="1";
+      span.style.overflow="hidden";
+      span.style.textOverflow="ellipsis";
+      span.style.whiteSpace="nowrap";
+      span.textContent=itemLabel;
+      div.appendChild(span);
+      if(item.arrow && idx===selIdx){const a=document.createElement("span");a.className="arrow";a.textContent=">";div.appendChild(a);}
+    }
+
+    listEl.appendChild(div);
+  }
+}
+
+render();
+
+
+/* =====================
+   スライドアニメ
+===================== */
+function makeGhost(){
+  const listEl=document.getElementById("list");
+  const wrapper=document.getElementById("list-wrapper");
+  // 既存ghostがあれば削除
+  const old=document.getElementById("list-ghost");
+  if(old&&old.parentNode) old.parentNode.removeChild(old);
+
+  const ghost=document.createElement("div");
+  ghost.id="list-ghost";
+  ghost.style.cssText=
+    "position:absolute;top:0;left:0;width:100%;height:100%;"+
+    "background:#e5e5e5;overflow:hidden;pointer-events:none;";
+  ghost.innerHTML=listEl.innerHTML;
+  if(wrapper) wrapper.insertBefore(ghost,listEl);
+}
+
+function slideList(direction){
+  const listEl=document.getElementById("list");
+  const wrapper=document.getElementById("list-wrapper");
+  const isFull=wrapper&&wrapper.classList.contains("full");
+  if(wrapper) wrapper.style.overflow=isFull?"visible":"hidden";
+
+  const ghost=document.getElementById("list-ghost");
+
+  if(direction==="right"){
+    // 進む：ghostを下（z:0）、新リストが上（z:1）から右スライド
+    if(ghost) ghost.style.zIndex="0";
+    listEl.style.zIndex="1";
+    listEl.classList.remove("slide-right","slide-left");
+    void listEl.offsetWidth;
+    listEl.classList.add("slide-right");
+    listEl.addEventListener("animationend",()=>{
+      listEl.classList.remove("slide-right");
+      listEl.style.zIndex="";
+      if(ghost&&ghost.parentNode) ghost.parentNode.removeChild(ghost);
+      if(wrapper&&!wrapper.classList.contains("full")) wrapper.style.overflow="hidden";
+    },{once:true});
+
+  } else {
+    // 戻る：ghostを上（z:1）でそのまま右にCSS transitionで退場
+    if(ghost){
+      ghost.style.zIndex="1";
+      listEl.style.zIndex="0";
+      ghost.style.transition="transform 0.18s ease-out";
+      ghost.style.transform="translateX(0)";
+      // 1フレーム後に右へ
+      requestAnimationFrame(()=>{
+        requestAnimationFrame(()=>{
+          ghost.style.transform="translateX(100%)";
+          ghost.addEventListener("transitionend",()=>{
+            if(ghost.parentNode) ghost.parentNode.removeChild(ghost);
+            listEl.style.zIndex="";
+            if(wrapper&&!wrapper.classList.contains("full")) wrapper.style.overflow="hidden";
+          },{once:true});
+        });
+      });
+    }
+  }
+}
+
+
+/* =====================
+   IndexedDB（曲の永続化）
+   ページを閉じても、次回開いたときにファイル選択なしで
+   曲がそのまま使えるように、ファイルの中身ごと端末内に保存する
+===================== */
+const DB_NAME="ipodweb-db", DB_VERSION=1, DB_STORE="songs";
+function openDB(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(DB_NAME,DB_VERSION);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains(DB_STORE)){
+        db.createObjectStore(DB_STORE,{keyPath:"dbId"});
+      }
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function dbPutSong(record){
+  const db=await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(DB_STORE,"readwrite");
+    tx.objectStore(DB_STORE).put(record);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+async function dbGetAllSongs(){
+  const db=await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(DB_STORE,"readonly");
+    const req=tx.objectStore(DB_STORE).getAll();
+    req.onsuccess=()=>resolve(req.result||[]);
+    req.onerror=()=>reject(req.error);
+  });
+}
+
+async function loadSongsFromDB(){
+  try{
+    const records=await dbGetAllSongs();
+    records.sort((a,b)=>a.addedAt-b.addedAt);
+    records.forEach(r=>{
+      songs.push({
+        dbId:r.dbId,
+        url:URL.createObjectURL(r.blob),
+        title:r.title,
+        artist:r.artist,
+        artworkUrl:r.artworkBlob?URL.createObjectURL(r.artworkBlob):null
+      });
+    });
+    if(songs.length>0){MENUS=buildMenus();render();}
+  }catch(e){console.log("db load error:",e);}
+}
+
+/* =====================
+   ローカル曲取得（サーバー不要・端末内ファイル）
+===================== */
+
+// jsmediatagsでID3タグ（曲名・アーティスト・アルバムアート）を読む。
+// タグが無いmp3や非対応形式でもエラーにせず、ファイル名から推測して再生できるようにする。
+function readTags(file){
+  return new Promise((resolve)=>{
+    if(typeof jsmediatags==="undefined"){resolve(null);return;}
+    jsmediatags.read(file,{
+      onSuccess:(tag)=>resolve(tag.tags||null),
+      onError:()=>resolve(null)
+    });
+  });
+}
+
+function guessFromFilename(file){
+  const nameNoExt=file.name.replace(/\.[^/.]+$/,"");
+  let artist="不明のアーティスト", title=nameNoExt;
+  const parts=nameNoExt.split(" - ");
+  if(parts.length>=2){artist=parts[0].trim();title=parts.slice(1).join(" - ").trim();}
+  return {artist,title};
+}
+
+document.getElementById("local-file-input").addEventListener("change",async(e)=>{
+  const files=Array.from(e.target.files||[]);
+  if(files.length===0)return;
+  e.target.value=""; // 同じファイルを連続で選び直せるよう先にリセット
+
+  for(const file of files){
+    const guessed=guessFromFilename(file);
+    let artist=guessed.artist, title=guessed.title, artworkBlob=null;
+
+    // mp3などID3タグ付きファイルはタグから曲名・アーティスト・アートワークを取得
+    // （タグが無い/読めない場合はファイル名の推測をそのまま使うのでサムネイル無しでも問題なく再生できる）
+    const tags=await readTags(file);
+    if(tags){
+      if(tags.title) title=tags.title;
+      if(tags.artist) artist=tags.artist;
+      if(tags.picture){
+        const{data,format}=tags.picture;
+        artworkBlob=new Blob([new Uint8Array(data)],{type:format});
+      }
+    }
+
+    const dbId=(crypto.randomUUID?crypto.randomUUID():("id"+Date.now()+Math.random()));
+    const record={dbId,blob:file,artworkBlob,title,artist,addedAt:Date.now()};
+    try{ await dbPutSong(record); }catch(err){ console.log("db save error:",err); }
+
+    songs.push({
+      dbId,
+      url:URL.createObjectURL(file),
+      title,artist,
+      artworkUrl:artworkBlob?URL.createObjectURL(artworkBlob):null
+    });
+    currentSongIdx=songs.length-1;
+  }
+
+  MENUS=buildMenus();
+  render();
+  // ファイル追加後は曲一覧を確認しやすいようsongsメニューへ
+  makeGhost();
+  menuStack.push({menuKey:"songs",selectedIdx:currentSongIdx,scrollOffset:0});
+  render();
+  slideList("right");
+});
+
+/* localplayer（HTMLAudioElement）のイベント */
+const localplayer=document.getElementById("localplayer");
+localplayer.addEventListener("ended",()=>{ nextTrackAuto(); });
+localplayer.addEventListener("play",()=>{ isPlaying=true;updateStatus(); });
+localplayer.addEventListener("pause",()=>{ isPlaying=false;updateStatus(); });
+
+/* =====================
+   シークバー（タップ/ドラッグで再生位置を変更）
+===================== */
+const npSeekbar=document.getElementById("np-seekbar");
+function seekToClientX(clientX){
+  if(!hasPlayed||!localplayer.duration)return;
+  const r=npSeekbar.getBoundingClientRect();
+  let ratio=(clientX-r.left)/r.width;
+  ratio=Math.max(0,Math.min(1,ratio));
+  localplayer.currentTime=ratio*localplayer.duration;
+  updateNowPlayingTime();
+}
+npSeekbar.addEventListener("touchstart",(e)=>{e.stopPropagation();seekToClientX(e.touches[0].clientX);},{passive:true});
+npSeekbar.addEventListener("touchmove",(e)=>{e.stopPropagation();seekToClientX(e.touches[0].clientX);},{passive:true});
+npSeekbar.addEventListener("mousedown",(e)=>{e.stopPropagation();seekToClientX(e.clientX);
+  function onMove(ev){seekToClientX(ev.clientX);}
+  function onUp(){document.removeEventListener("mousemove",onMove);document.removeEventListener("mouseup",onUp);}
+  document.addEventListener("mousemove",onMove);
+  document.addEventListener("mouseup",onUp);
+});
+
+/* =====================
+   ナビゲーション
+===================== */
+function menuUp(){
+  const cur=menuStack[menuStack.length-1];
+  if(cur.selectedIdx>0){
+    cur.selectedIdx--;
+    if(cur.selectedIdx<cur.scrollOffset)cur.scrollOffset--;
+    render();clickSound();
+  }
+}
+
+function menuDown(){
+  const cur=menuStack[menuStack.length-1];
+  const items=MENUS[cur.menuKey];
+  if(cur.selectedIdx<items.length-1){
+    cur.selectedIdx++;
+    if(cur.selectedIdx>=cur.scrollOffset+visibleCount)cur.scrollOffset++;
+    render();clickSound();
+  }
+}
+
+function menuSelect(){
+  if(screenMode==="nowplaying"){
+    // Now Playing画面ではセンターボタンは何もしない
+    // （外周のPLAYボタンと近く誤操作しやすいため無効化）
+    return;
+  }
+  const cur=menuStack[menuStack.length-1];
+  const item=MENUS[cur.menuKey][cur.selectedIdx];
+  clickSound();
+
+  if(item.action==="goto"){
+    makeGhost();
+    menuStack.push({menuKey:item.target,selectedIdx:0,scrollOffset:0});
+    render();
+    slideList("right");
+  } else if(item.action==="playsong"){
+    shuffleMode=false;
+    playSong(item.idx);
+    if(autoNowPlaying) showNowPlayingScreen("right");
+  } else if(item.action==="shuffle"){
+    shufflePlay();
+    showNowPlayingScreen("right");
+  } else if(item.action==="nowplaying"){
+    showNowPlayingScreen("right");
+  } else if(item.action==="toggleautonp"){
+    autoNowPlaying=!autoNowPlaying;
+    render();
+    return;
+  } else if(item.action==="togglelistmode"){
+    listThumbMode=!listThumbMode;
+    render();
+    return;
+  } else if(item.action==="toggleclock"){
+    clockEnabled=!clockEnabled;
+    if(!clockEnabled){stopClock();restoreTopText();}
+    render();
+    return;
+  } else if(item.action==="toggleclock24"){
+    clock24h=!clock24h;
+    render();
+    return;
+  } else if(item.action==="toggleclick"){
+    clickSoundEnabled=!clickSoundEnabled;
+    render();
+    return;
+  } else if(item.action==="openlocalpicker"){
+    document.getElementById("local-file-input").click();
+    return;
+  } else if(item.action==="setlang"){
+    lang=lang==="en"?"ja":"en";
+    rebuildMenus();
+    render();
+  }
+}
+
+function menuBack(){
+  clickSound();
+  if(screenMode==="nowplaying"){
+    showMenuScreen("left");return;
+  }
+  if(menuStack.length>1){
+    makeGhost();
+    menuStack.pop();
+    render();
+    slideList("left");
+  }
+}
+
+/* =====================
+   ホイール入力
+===================== */
+const wheel=document.getElementById("wheel");
+let touchLastAngle=null,touchAccum=0,isScrolling=false;
+
+function getAngle(x,y){
+  const r=wheel.getBoundingClientRect();
+  return Math.atan2(y-(r.top+r.height/2),x-(r.left+r.width/2));
+}
+
+wheel.addEventListener("touchstart",(e)=>{
+  resetIdleTimer();
+  const t=e.touches[0];
+  touchLastAngle=getAngle(t.clientX,t.clientY);
+  touchAccum=0;isScrolling=false;
+});
+
+wheel.addEventListener("touchmove",(e)=>{
+  const t=e.touches[0];
+  const angle=getAngle(t.clientX,t.clientY);
+  let diff=angle-touchLastAngle;
+  if(diff>Math.PI)diff-=Math.PI*2;
+  if(diff<-Math.PI)diff+=Math.PI*2;
+  touchAccum+=diff;
+  if(Math.abs(touchAccum)>0.05)isScrolling=true;
+  if(touchAccum>0.25){
+    if(screenMode==="nowplaying") volumeUp();
+    else menuDown();
+    touchAccum=0;
+  }
+  if(touchAccum<-0.25){
+    if(screenMode==="nowplaying") volumeDown();
+    else menuUp();
+    touchAccum=0;
+  }
+  touchLastAngle=angle;
+  e.preventDefault();
+},{passive:false});
+
+wheel.addEventListener("touchend",(e)=>{
+  e.preventDefault();
+  const r=wheel.getBoundingClientRect();
+  const t=e.changedTouches[0];
+  const x=t.clientX-r.left, y=t.clientY-r.top;
+  const cx=r.width/2, cy=r.height/2;
+  const dist=Math.sqrt((x-cx)**2+(y-cy)**2);
+
+  if(dist<=45){menuSelect();return;}
+  if(isScrolling)return;
+  // 外周ボタンはidで直接処理するのでここでは何もしない
+},{passive:false});
+
+let mouseStartX=0,mouseStartY=0,mouseLastAngle=null,mouseAccum=0,mouseDragged=false;
+
+wheel.addEventListener("mousedown",(e)=>{
+  resetIdleTimer();
+  mouseStartX=e.clientX;mouseStartY=e.clientY;
+  mouseLastAngle=getAngle(e.clientX,e.clientY);
+  mouseAccum=0;mouseDragged=false;
+});
+
+wheel.addEventListener("mousemove",(e)=>{
+  if(e.buttons!==1)return;
+  const dx=Math.abs(e.clientX-mouseStartX), dy=Math.abs(e.clientY-mouseStartY);
+  if(dx>10||dy>10)mouseDragged=true;
+  const angle=getAngle(e.clientX,e.clientY);
+  if(mouseLastAngle!==null){
+    let diff=angle-mouseLastAngle;
+    if(diff>Math.PI)diff-=Math.PI*2;
+    if(diff<-Math.PI)diff+=Math.PI*2;
+    mouseAccum+=diff;
+    if(mouseAccum>0.12){
+      if(screenMode==="nowplaying") volumeUp();
+      else menuDown();
+      mouseAccum=0;
+    }
+    if(mouseAccum<-0.12){
+      if(screenMode==="nowplaying") volumeDown();
+      else menuUp();
+      mouseAccum=0;
+    }
+  }
+  mouseLastAngle=angle;
+});
+
+wheel.addEventListener("mouseup",(e)=>{
+  const r=wheel.getBoundingClientRect();
+  const x=e.clientX-r.left, y=e.clientY-r.top;
+  const cx=r.width/2, cy=r.height/2;
+  const dist=Math.sqrt((x-cx)**2+(y-cy)**2);
+
+  if(dist<=45){menuSelect();mouseDragged=false;return;}
+  if(mouseDragged){mouseDragged=false;return;}
+
+  // 外周ボタンはidで直接処理するのでここでは何もしない
+
+  mouseDragged=false;
+});
+
+
+/* ===== 外周ボタン直接クリック ===== */
+document.getElementById("btn-menu").addEventListener("click",(e)=>{e.stopPropagation();menuBack();});
+document.getElementById("btn-play").addEventListener("click",(e)=>{e.stopPropagation();togglePlay();clickSound();});
+document.getElementById("btn-prev").addEventListener("click",(e)=>{e.stopPropagation();prevTrack();});
+document.getElementById("btn-next").addEventListener("click",(e)=>{e.stopPropagation();nextTrack();});
+document.getElementById("btn-menu").addEventListener("touchend",(e)=>{e.stopPropagation();e.preventDefault();menuBack();},{passive:false});
+document.getElementById("btn-play").addEventListener("touchend",(e)=>{e.stopPropagation();e.preventDefault();togglePlay();clickSound();},{passive:false});
+document.getElementById("btn-prev").addEventListener("touchend",(e)=>{e.stopPropagation();e.preventDefault();prevTrack();},{passive:false});
+document.getElementById("btn-next").addEventListener("touchend",(e)=>{e.stopPropagation();e.preventDefault();nextTrack();},{passive:false});
+/* =====================
+   起動
+===================== */
+
+/* =====================
+   レスポンシブスケール
+===================== */
+function scaleIpod(){
+  const ipod=document.getElementById("ipod");
+  const W=window.innerWidth;
+  const H=window.innerHeight;
+  const ipodW=260;
+  const ipodH=420;
+  const margin=16; // 余白px
+  const scaleX=(W-margin*2)/ipodW;
+  const scaleY=(H-margin*2)/ipodH;
+  const scale=Math.min(scaleX,scaleY,2); // 最大2倍まで
+  ipod.style.transform=`scale(${scale})`;
+}
+window.addEventListener("beforeunload",()=>{
+  songs.forEach(s=>{
+    if(s.url) URL.revokeObjectURL(s.url);
+    if(s.artworkUrl) URL.revokeObjectURL(s.artworkUrl);
+  });
+});
+
+window.addEventListener("resize",scaleIpod);
+
+window.addEventListener("load",()=>{
+  setTimeout(()=>{
+    document.getElementById("boot").style.display="none";
+    resetIdleTimer();
+    scaleIpod();
+  },2000);
+  scaleIpod();
+  loadSongsFromDB();
+});
+</script>
+<script>
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
